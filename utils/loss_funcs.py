@@ -4,6 +4,7 @@ from torch.autograd import Variable
 from utils import data_utils
 import numpy.polynomial.chebyshev as chebyshev
 
+
 def sen_loss(outputs, all_seq, dim_used, N):
     """
     :param outputs: N * (seq_len*dim_used_len)
@@ -12,16 +13,14 @@ def sen_loss(outputs, all_seq, dim_used, N):
     :param dim_used:
     :return:
     """
-    # print(outputs.shape)#[128, 48, 20]
-    # print(all_seq.shape)#[128, 20, 99]
     n, seq_len, dim_full_len = all_seq.data.shape
     dim_used_len = len(dim_used)
     dim_used = np.array(dim_used)
     t = np.arange(1, N + 1, 1)
     A = chebyshev.chebvander(t, N - 1)
-    A= Variable(torch.from_numpy(A)).float().cuda()
-    predict=torch.mm(A, outputs.view(-1,N).t())
-    pred_expmap = predict.t().view(-1,dim_used_len,seq_len).transpose(1, 2)
+    A = Variable(torch.from_numpy(A)).float().cuda()
+    predict = torch.mm(A, outputs.view(-1, N).t())
+    pred_expmap = predict.t().view(-1, dim_used_len, seq_len).permute(0, 2, 1)
     targ_expmap = all_seq.clone()[:, :, dim_used]
 
     loss = torch.mean(torch.sum(torch.abs(pred_expmap - targ_expmap), dim=2).view(-1))
@@ -80,8 +79,8 @@ def mpjpe_error(outputs, all_seq, input_n, dim_used, N):
     :return:
     """
 
-    n, seq_len, dim_full_len = all_seq.data.shape# batch, N, 99
-    dim_used_len = len(dim_used)#48
+    n, seq_len, dim_full_len = all_seq.data.shape  # batch, N, 99
+    dim_used_len = len(dim_used)  # 48
 
     t = np.arange(1, N + 1, 1)
     A = chebyshev.chebvander(t, N - 1)

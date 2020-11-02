@@ -1,7 +1,7 @@
 from torch.utils.data import Dataset
 import numpy as np
 from utils import data_utils
-
+import numpy.polynomial.chebyshev as chebyshev
 
 class H36motion(Dataset):
 
@@ -58,11 +58,30 @@ class H36motion(Dataset):
         input_chebyshev_coef = data_utils.get_chebyshev_coef(input_n + output_n, all_seqs[i_idx, :])
         input_chebyshev_coef = input_chebyshev_coef.transpose().reshape([-1, len(dim_used), input_n + output_n])
 
-        output_chebyshev_coef = data_utils.get_chebyshev_coef(input_n + output_n, all_seqs)
-        output_chebyshev_coef = output_chebyshev_coef.transpose().reshape([-1, len(dim_used), input_n + output_n])
-        #todo inverse the input
-        self.input_chebyshev_coef = -input_chebyshev_coef
-        self.output_chebyshev_coef = output_chebyshev_coef
+        target_chebyshev_coef = data_utils.get_chebyshev_coef(input_n + output_n, all_seqs)
+        target_chebyshev_coef = target_chebyshev_coef.transpose().reshape([-1, len(dim_used), input_n + output_n])
+
+        self.input_chebyshev_coef = input_chebyshev_coef
+        #self.output_chebyshev_coef = target_chebyshev_coef
+        self.output_chebyshev_coef = target_chebyshev_coef-input_chebyshev_coef
+        # todo code
+        # input=input_chebyshev_coef[100:116,:,:]
+        # target=target_chebyshev_coef[100:116,:,:]
+        # print(input.shape)
+        # print(target.shape)
+        # all_seq=self.all_seqs[100:116,:,:]
+        # print(all_seq.shape)
+        # n, seq_len, dim_full_len = all_seq.data.shape
+        # dim_used_len = len(dim_used)
+        # dim_used = np.array(dim_used)
+        # t = np.arange(1, input_n+output_n + 1, 1)
+        # A = chebyshev.chebvander(t, input_n+output_n - 1)
+        # predict = np.dot(A, target.reshape(-1, input_n+output_n).transpose())
+        # pred_expmap = predict.transpose().reshape(-1, dim_used_len, seq_len).transpose(0,2,1)
+        # targ_expmap = all_seq[:, :, dim_used]
+        #
+        # loss = np.mean(np.sum(np.abs(pred_expmap - targ_expmap), axis=2).reshape(-1))
+        # print(loss)#0.019
 
 
     def __len__(self):

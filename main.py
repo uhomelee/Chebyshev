@@ -21,6 +21,7 @@ import utils.model as nnmodel
 import utils.data_utils as data_utils
 import numpy.polynomial.chebyshev as chebyshev
 
+
 def main(opt):
     start_epoch = 0
     err_best = 10000
@@ -39,7 +40,7 @@ def main(opt):
     sample_rate = opt.sample_rate
 
     # 48 nodes for angle prediction
-    model = nnmodel.GCN(input_feature=input_n+output_n, hidden_feature=opt.linear_size, p_dropout=opt.dropout,
+    model = nnmodel.GCN(input_feature=input_n + output_n, hidden_feature=opt.linear_size, p_dropout=opt.dropout,
                         num_stage=opt.num_stage, node_n=48)
 
     if is_cuda:
@@ -111,13 +112,14 @@ def main(opt):
         ret_log = np.array([epoch + 1])
         head = np.array(['epoch'])
         # per epoch
-        lr_now, t_l, t_e, t_3d = train(train_loader, model, optimizer, input_n=input_n,output_n=output_n,
+        lr_now, t_l, t_e, t_3d = train(train_loader, model, optimizer, input_n=input_n, output_n=output_n,
                                        lr_now=lr_now, max_norm=opt.max_norm, is_cuda=is_cuda,
                                        dim_used=train_dataset.dim_used)
         ret_log = np.append(ret_log, [lr_now, t_l, t_e, t_3d])
         head = np.append(head, ['lr', 't_l', 't_e', 't_3d'])
 
-        v_e, v_3d = val(val_loader, model, input_n=input_n, output_n=output_n, is_cuda=is_cuda, dim_used=train_dataset.dim_used)
+        v_e, v_3d = val(val_loader, model, input_n=input_n, output_n=output_n, is_cuda=is_cuda,
+                        dim_used=train_dataset.dim_used)
 
         ret_log = np.append(ret_log, [v_e, v_3d])
         head = np.append(head, ['v_e', 'v_3d'])
@@ -162,7 +164,8 @@ def main(opt):
                         file_name=file_name)
 
 
-def train(train_loader, model, optimizer, input_n=10, output_n=25, lr_now=None, max_norm=True, is_cuda=False, dim_used=[]):
+def train(train_loader, model, optimizer, input_n=10, output_n=25, lr_now=None, max_norm=True, is_cuda=False,
+          dim_used=[]):
     t_l = utils.AccumLoss()
     t_e = utils.AccumLoss()
     t_3d = utils.AccumLoss()
@@ -180,16 +183,16 @@ def train(train_loader, model, optimizer, input_n=10, output_n=25, lr_now=None, 
         bt = time.time()
         if is_cuda:
             inputs = Variable(inputs.cuda()).float()
-            # targets = Variable(targets.cuda(async=True)).float()
+            targets = Variable(targets.cuda()).float()
             all_seq = Variable(all_seq.cuda()).float()
 
         outputs = model(inputs)
         # n = outputs.shape[0]
         # outputs = outputs.view(n, -1)
         # # targets = targets.view(n, -1)
+        predict = inputs + outputs
 
-        loss = loss_funcs.sen_loss(outputs, all_seq, dim_used, input_n+output_n)
-        print(loss)
+        loss = loss_funcs.sen_loss(predict, all_seq, dim_used, input_n + output_n)
         # calculate loss and backward
         optimizer.zero_grad()
         loss.backward()
@@ -199,13 +202,13 @@ def train(train_loader, model, optimizer, input_n=10, output_n=25, lr_now=None, 
         n, _, _ = all_seq.data.shape
 
         # 3d error
-        m_err = loss_funcs.mpjpe_error(outputs, all_seq, input_n, dim_used, input_n+output_n)
+        m_err = loss_funcs.mpjpe_error(predict, all_seq, input_n, dim_used, input_n + output_n)
         # angle space error
-        e_err = loss_funcs.euler_error(outputs, all_seq, input_n, dim_used, input_n+output_n)
+        e_err = loss_funcs.euler_error(predict, all_seq, input_n, dim_used, input_n + output_n)
         # update the training loss
         t_l.update(loss.cpu().data.numpy() * n, n)
-        t_e.update(e_err.cpu().data.numpy()* n, n)
-        t_3d.update(m_err.cpu().data.numpy()* n, n)
+        t_e.update(e_err.cpu().data.numpy() * n, n)
+        t_3d.update(m_err.cpu().data.numpy() * n, n)
 
         bar.suffix = '{}/{}|batch time {:.4f}s|total time{:.2f}s'.format(i + 1, len(train_loader), time.time() - bt,
                                                                          time.time() - st)
@@ -214,13 +217,15 @@ def train(train_loader, model, optimizer, input_n=10, output_n=25, lr_now=None, 
     return lr_now, t_l.avg, t_e.avg, t_3d.avg
 
 
-def test(train_loader, model, input_n=20, output_n=50,  is_cuda=False, dim_used=[]):
+def test(train_loader, model, input_n=20, output_n=50, is_cuda=False, dim_used=[]):
     N = 0
     # t_l = 0
     if output_n >= 25:
         eval_frame = [1, 3, 7, 9, 13, 24]
     elif output_n == 10:
         eval_frame = [1, 3, 7, 9]
+    else:
+        eval_frame = [1, 2, 3, 4]
 
     t_e = np.zeros(len(eval_frame))
     t_3d = np.zeros(len(eval_frame))
@@ -241,13 +246,12 @@ def test(train_loader, model, input_n=20, output_n=50,  is_cuda=False, dim_used=
         # inverse dct transformation
         n, seq_len, dim_full_len = all_seq.data.shape
         dim_used_len = len(dim_used)
-        N=input_n+output_n
+        N = input_n + output_n
         t = np.arange(1, N + 1, 1)
         A = chebyshev.chebvander(t, N - 1)
         A = Variable(torch.from_numpy(A)).float().cuda()
         outputs_t = torch.matmul(A, outputs.view(-1, N).transpose(0, 1))
         outputs_expmap = outputs_t.transpose(0, 1).view(-1, dim_used_len, seq_len).transpose(1, 2)
-
 
         pred_expmap = all_seq.clone()
         dim_used = np.array(dim_used)
@@ -311,8 +315,8 @@ def val(train_loader, model, input_n=20, output_n=10, is_cuda=False, dim_used=[]
         # loss = loss_funcs.sen_loss(outputs, all_seq, dim_used)
 
         n, _, _ = all_seq.data.shape
-        m_err = loss_funcs.mpjpe_error(outputs, all_seq, input_n, dim_used, input_n+output_n)
-        e_err = loss_funcs.euler_error(outputs, all_seq, input_n, dim_used, input_n+output_n)
+        m_err = loss_funcs.mpjpe_error(outputs, all_seq, input_n, dim_used, input_n + output_n)
+        e_err = loss_funcs.euler_error(outputs, all_seq, input_n, dim_used, input_n + output_n)
 
         # t_l.update(loss.cpu().data.numpy()[0] * n, n)
         t_e.update(e_err.cpu().data.numpy() * n, n)
